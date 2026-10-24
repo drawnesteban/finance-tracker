@@ -68,7 +68,8 @@ const blank = {
   goals: () => ({ name: "", target: 0, saved: 0 }),
 };
 const notes = {
-  accts: ["From your bank and card apps. Cards: the statement balance.", "Rename, change the type or limit, add an account, or remove one you closed. Saved months keep their balances."],
+  accts: ["The balance from your bank app.", "Rename, change the type, add an account, or remove one you closed. Saved months keep their balances."],
+  cards: ["What you owe: the statement balance from each card's app. Limit and available are for reference.", "Rename, set the limit and points, add a card, or remove one you closed. Saved months keep their balances."],
   income: ["Placeholders are the expected amounts. Type what actually arrived.", "Rename, set what you expect per month and for how many months, or remove a source."],
   cats: ["Totals from statements, not each purchase.", "Rename, set the monthly plan, or remove a category. Its bills become Uncategorized."],
   bills: ["Per month spreads weekly, quarterly and yearly bills evenly, so the monthly total is what to set aside.", "Rename, change category, how often it repeats, amount or due day, or remove a bill you cancelled."],
@@ -83,10 +84,14 @@ const cv = (kind, iid, v, ph = "0.00") => `<input class="input" inputmode="decim
 
 const rows = {
   accts: (a, n, ed) => {
-    if (ed) return `<tr><td>${field("accts", n, "name", a.name, "name-input", "Account name")}</td><td>${select("accts", n, "type", ["Checking", "Savings", "Credit"].map((t) => [t, t]), a.type)}</td><td>${field("accts", n, "earns", a.earns, "name-input", "Earns on")}</td><td class="num">${a.type === "Credit" ? field("accts", n, "limit", a.limit || "", "input short", "Limit") : ""}</td><td class="num">${field("accts", n, "points", a.points || "", "input short", "Points $")}</td>${xBtn("accts", n, a.name)}</tr>`;
+    const types = select("accts", n, "type", ["Checking", "Savings", "Credit"].map((t) => [t, t === "Credit" ? "Credit card" : t]), a.type);
+    if (ed && a.type !== "Credit") return `<tr><td>${field("accts", n, "name", a.name, "name-input", "Account name")}</td><td>${types}</td>${xBtn("accts", n, a.name)}</tr>`;
+    if (ed) return `<tr><td>${field("accts", n, "name", a.name, "name-input", "Card name")}</td><td>${types}</td><td>${field("accts", n, "earns", a.earns, "name-input", "Earns on")}</td><td class="num">${field("accts", n, "limit", a.limit || "", "input short", "Limit")}</td><td class="num">${field("accts", n, "points", a.points || "", "input short", "Points $")}</td>${xBtn("accts", n, a.name)}</tr>`;
     const r = rec(curKey()), p = rec(prevKey());
     const last = p?.balances?.[a.id];
-    return `<tr><td><span class="dotname"><span class="dot" style="background:${a.c}"></span><span class="name">${esc(a.name || "Untitled")}</span><span class="chip">${a.type}</span></span></td><td class="num meta">${has(last) ? fmt2(num(last)) : "—"}</td><td class="num">${cv("balances", a.id, r?.balances?.[a.id])}</td></tr>`;
+    const cur = r?.balances?.[a.id];
+    if (a.type === "Credit") return `<tr><td>${dotName(a)}</td><td class="num meta">${num(a.limit) ? fmt(num(a.limit)) : "—"}</td><td class="num meta">${has(last) ? fmt2(num(last)) : "—"}</td><td class="num">${cv("balances", a.id, cur)}</td><td class="num meta" data-avail="${a.id}">${num(a.limit) && has(cur) ? fmt(num(a.limit) - num(cur)) : "—"}</td></tr>`;
+    return `<tr><td>${dotName(a)}</td><td class="num meta">${has(last) ? fmt2(num(last)) : "—"}</td><td class="num">${cv("balances", a.id, cur)}</td></tr>`;
   },
   income: (i, n, ed) => ed
     ? `<tr><td>${field("income", n, "name", i.name, "name-input", "Source name")}</td><td class="num">${field("income", n, "monthly", i.monthly)}</td><td class="num">${field("income", n, "months", i.months)}</td>${xBtn("income", n, i.name)}</tr>`
@@ -101,13 +106,40 @@ const rows = {
   },
 };
 const heads = {
-  accts: (ed) => (ed ? `<tr><th>Account</th><th>Type</th><th>Earns on</th><th class="num">Limit</th><th class="num">Points ≈ $</th><th></th></tr>` : `<tr><th>Account</th><th class="num">Last month</th><th class="num">${MONTHS[m]}</th></tr>`),
+  accts: (ed) => (ed ? `<tr><th>Account</th><th>Type</th><th></th></tr>` : `<tr><th>Account</th><th class="num">Last month</th><th class="num">${MONTHS[m].slice(0, 3)}</th></tr>`),
+  cards: (ed) => (ed ? `<tr><th>Card</th><th>Type</th><th>Earns on</th><th class="num">Limit</th><th class="num">Points ≈ $</th><th></th></tr>` : `<tr><th>Card</th><th class="num">Limit</th><th class="num">Last month</th><th class="num">Owed in ${MONTHS[m].slice(0, 3)}</th><th class="num">Available</th></tr>`),
   income: (ed) => (ed ? `<tr><th>Source</th><th class="num">Per month</th><th class="num">Months</th><th></th></tr>` : ""),
   cats: (ed) => (ed ? `<tr><th>Category</th><th class="num">Plan / mo</th><th></th></tr>` : `<tr><th>Category</th><th class="num">Plan</th><th class="num">Actual</th></tr>`),
   bills: (ed) => (ed ? `<tr><th>Bill</th><th>Category</th><th>Repeats</th><th class="num">Amount</th><th>Due day</th><th></th></tr>` : `<tr><th>Bill</th><th>Category</th><th>Repeats</th><th>Due</th><th class="num">Amount</th><th class="num">Per month</th><th class="num">Per year</th></tr>`),
 };
 
+// Bank accounts and credit cards share one list (D.accts) but get their own tables.
+function renderAccts() {
+  const ed = editing.accts, r = rec(curKey());
+  const rowsOf = (cards) => D.accts.map((a, n) => ((a.type === "Credit") === cards ? rows.accts(a, n, ed) : "")).join("");
+  const banks = rowsOf(false), cards = rowsOf(true);
+  const empty = (w) => `<tr><td class="empty-line" colspan="5">No ${w} yet. Use Edit to add one.</td></tr>`;
+  $("accts-checkin").innerHTML = heads.accts(ed) + (banks || (ed ? "" : empty("accounts")));
+  $("cards-checkin").innerHTML = heads.cards(ed) + (cards || (ed ? "" : empty("cards")));
+  renderCardTotals();
+  document.querySelectorAll('[data-add="accts"]').forEach((b) => (b.hidden = !ed));
+  document.querySelectorAll('[data-edit="accts"]').forEach((b) => (b.textContent = ed ? "Done" : "Edit"));
+  document.querySelector('[data-note="accts"]').textContent = notes.accts[ed ? 1 : 0];
+  document.querySelector('[data-note="cards"]').textContent = notes.cards[ed ? 1 : 0];
+}
+
+// Also called while typing a balance, so it only touches the totals and the Available cells.
+function renderCardTotals() {
+  const r = rec(curKey()), C = D.accts.filter((a) => a.type === "Credit");
+  const limit = C.reduce((t, a) => t + num(a.limit), 0);
+  const owed = C.reduce((t, a) => t + num(r?.balances?.[a.id]), 0);
+  const anyOwed = C.some((a) => has(r?.balances?.[a.id]));
+  C.forEach((a) => { const el = document.querySelector(`[data-avail="${a.id}"]`), v = r?.balances?.[a.id]; if (el) el.textContent = num(a.limit) && has(v) ? fmt(num(a.limit) - num(v)) : "—"; });
+  $("cards-checkin-total").innerHTML = !editing.accts && C.length ? `<tr><td>Total</td><td class="num">${fmt(limit)}</td><td></td><td class="num">${anyOwed ? fmt2(owed) : "—"}</td><td class="num">${anyOwed ? fmt(limit - owed) : "—"}</td></tr>` : "";
+}
+
 function renderList(l) {
+  if (l === "accts") return renderAccts();
   const ed = editing[l];
   $(l + "-checkin").innerHTML = heads[l](ed) + D[l].map((i, n) => rows[l](i, n, ed)).join("") + (!D[l].length && !ed ? `<tr><td class="empty-line">Nothing here yet. Use Edit to add one.</td></tr>` : "");
   document.querySelector(`[data-add="${l}"]`).hidden = !ed;
@@ -132,8 +164,8 @@ function renderOverview(skipGoals) {
   const small = (t) => `<small style="font-size:14px;font-weight:500;color:var(--muted)">${t}</small>`;
   $("stats").innerHTML = `
     <div class="stat"><div class="stat-label">Cash</div><div class="stat-value">${cashAccts.length ? fmt(cash) : "—"}</div><div class="stat-note">${cashAccts.map((x) => esc(x.a.name)).join(", ") || "no balances yet"}${cashAccts.some((x) => !x.b.key) ? " · last known, before check-ins" : ""}</div></div>
-    <div class="stat"><div class="stat-label">Owed on cards</div><div class="stat-value${owed > 0 ? " neg" : ""}">${anyCheckin ? fmt(owed) : "—"}</div><div class="stat-note">${cards.length} card${cards.length === 1 ? "" : "s"}, statement balances</div></div>
-    <div class="stat"><div class="stat-label">Net cash</div><div class="stat-value">${anyCheckin ? fmt(cash - owed) : "—"}</div><div class="stat-note">cash minus card debt · ${fmt(limit - owed)} credit available, not counted</div></div>
+    <div class="stat"><div class="stat-label">Owed on cards</div><div class="stat-value${owed > 0 ? " neg" : ""}">${anyCheckin ? fmt(owed) : "—"}</div><div class="stat-note">${cards.length} card${cards.length === 1 ? "" : "s"} · ${fmt(limit)} total limit${anyCheckin && limit ? ` · ${Math.round((owed / limit) * 100)}% used` : ""}</div></div>
+    <div class="stat"><div class="stat-label">Net cash</div><div class="stat-value">${anyCheckin ? fmt(cash - owed) : "—"}</div><div class="stat-note">cash minus card debt · available credit isn't counted</div></div>
     <div class="stat"><div class="stat-label">Planned margin</div><div class="stat-value ${margin >= 0 ? "good" : "neg"}">${fmt(margin)}${small("/mo")}</div><div class="stat-note">${fmt(income)} in − ${fmt(out)} out, per year</div></div>`;
 
   const r = rec(curKey());
@@ -167,8 +199,13 @@ function renderOverview(skipGoals) {
   $("nav-accts").innerHTML = A.map((a) => `<li><span class="dot" style="background:${a.c}"></span>${esc(a.name || "Untitled")}</li>`).join("");
   const latestKey = known.map((x) => x.b.key).filter(Boolean).sort().pop();
   $("accts-asof").textContent = latestKey ? `balances as of ${monthName(latestKey)}` : "no check-in yet";
-  $("accts-overview").innerHTML = bal.map(({ a, b }) => `<tr><td class="name">${esc(a.name || "Untitled")}</td><td><span class="chip">${a.type}</span></td><td class="meta">${esc(a.earns) || "—"}</td><td class="num meta">${num(a.limit) ? fmt(num(a.limit)) : "—"}</td><td class="num">${b ? fmt2(b.v) : "—"}</td><td class="num${num(a.points) ? "" : " meta"}">${num(a.points) ? fmt2(num(a.points)) : "—"}</td></tr>`).join("");
-  $("accts-total").innerHTML = `<tr><td colspan="3">Totals</td><td class="num meta">${fmt(limit)}</td><td class="num">${anyCheckin ? fmt(owed) + " owed" : "—"}</td><td class="num">${fmt2(A.reduce((t, a) => t + num(a.points), 0))}</td></tr>`;
+  const banks = bal.filter((x) => x.a.type !== "Credit"), cardBal = bal.filter((x) => x.a.type === "Credit");
+  $("accts-overview").innerHTML = banks.map(({ a, b }) => `<tr><td>${dotName(a)}</td><td><span class="chip">${a.type}</span></td><td class="num">${b ? fmt2(b.v) : "—"}</td></tr>`).join("") || `<tr><td class="empty-line" colspan="3">No bank accounts yet.</td></tr>`;
+  $("accts-total").innerHTML = banks.length ? `<tr><td colspan="2">Total</td><td class="num">${cashAccts.length ? fmt2(cash) : "—"}</td></tr>` : "";
+  const used = (o, l) => (l ? `${Math.round((o / l) * 100)}%` : "—");
+  $("cards-overview").innerHTML = cardBal.map(({ a, b }) => { const l = num(a.limit), o = b ? b.v : null; return `<tr><td>${dotName(a)}</td><td class="meta">${esc(a.earns) || "—"}</td><td class="num">${l ? fmt(l) : "—"}</td><td class="num">${o !== null ? fmt2(o) : "—"}</td><td class="num">${l ? fmt(l - (o || 0)) : "—"}</td><td class="num meta">${o !== null ? used(o, l) : "—"}</td><td class="num${num(a.points) ? "" : " meta"}">${num(a.points) ? fmt2(num(a.points)) : "—"}</td></tr>`; }).join("") || `<tr><td class="empty-line" colspan="7">No credit cards yet.</td></tr>`;
+  $("cards-total").innerHTML = cards.length ? `<tr><td colspan="2">Total</td><td class="num">${fmt(limit)}</td><td class="num">${anyCheckin ? fmt2(owed) : "—"}</td><td class="num">${fmt(limit - owed)}</td><td class="num">${anyCheckin ? used(owed, limit) : "—"}</td><td class="num">${fmt2(cards.reduce((t, a) => t + num(a.points), 0))}</td></tr>` : "";
+  $("cards-util").textContent = cards.length && limit ? `${fmt(limit)} total credit · ${used(owed, limit)} used` : "";
 }
 
 function renderGoals() {
@@ -636,7 +673,7 @@ document.addEventListener("click", (e) => {
       D.ledger.people.push({ id: newId("p"), name: "", c: palette[D.ledger.people.length % palette.length] });
     } else {
       editing[l] = true;
-      D[l].push({ id: newId(l[0]), ...blank[l](), c: palette[D[l].length % palette.length] });
+      D[l].push({ id: newId(l[0]), ...blank[l](), ...(t.dataset.type ? { type: t.dataset.type } : {}), c: palette[D[l].length % palette.length] });
     }
     save(l); renderAll();
     const inputs = document.querySelectorAll(`[data-list="${l}"][data-f="name"]`);
@@ -657,7 +694,7 @@ document.addEventListener("input", (e) => {
   if (el.dataset.cv) {
     const r = rec(curKey(), true);
     r[el.dataset.cv][el.dataset.id] = el.value.trim() === "" ? "" : num(el.value);
-    save("months"); renderShell(); renderOverview(); return;
+    save("months"); renderShell(); renderOverview(); if (el.dataset.cv === "balances") renderCardTotals(); return;
   }
   const { list, n, f } = el.dataset;
   if (!list || n === undefined) return;

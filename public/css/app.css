@@ -161,7 +161,7 @@ tfoot td { font-weight: 700; border-top: 1px solid var(--line-strong); }
 .form dl { margin: 0; display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; font-size: 13px; font-variant-numeric: tabular-nums; }
 .form dt { color: var(--muted); }
 .form dd { margin: 0; text-align: right; }
-.view[hidden] { display: none; }
+[hidden] { display: none !important; }
 .scroll { overflow-x: auto; }
 @media (max-width: 1100px) { .grid { grid-template-columns: 1fr 1fr; } .stats { grid-template-columns: 1fr 1fr; } }
 @media (max-width: 760px) {
@@ -212,7 +212,7 @@ tfoot td { font-weight: 700; border-top: 1px solid var(--line-strong); }
 .menu-btn { display: none; background: none; border: 0; padding: 6px; cursor: pointer; color: var(--text); }
 @media (max-width: 760px) { .menu-btn { display: block; } }
 @media (max-width: 760px) {
-  #accts-checkin th:nth-child(2), #accts-checkin td:nth-child(2), #accts-checkin .chip { display: none; }
+  #accts-checkin th:nth-child(2), #accts-checkin td:nth-child(2), #accts-checkin .chip, #cards-checkin tr > :nth-child(3), #cards-checkin-total tr > :nth-child(3) { display: none; }
   .input { width: 100px; }
 }
 
@@ -257,3 +257,4 @@ tfoot td { font-weight: 700; border-top: 1px solid var(--line-strong); }
   #proj-chart .label { font-size: 15px; }
 }
 @media (max-width: 640px) { #proj-entries td, #proj-all td { white-space: nowrap; } }
+#accts-checkin .dotname { white-space: nowrap; }

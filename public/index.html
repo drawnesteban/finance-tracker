@@ -67,11 +67,18 @@
           <div id="goals"></div>
           <button class="btn ghost small add-btn" type="button" data-add="goals" hidden>+ Add goal</button>
         </div>
-        <div class="card span-3">
-          <div class="card-head"><h2>Accounts</h2><span class="link" id="accts-asof"></span></div>
+        <div class="card">
+          <div class="card-head"><h2>Bank accounts</h2><span class="link" id="accts-asof"></span></div>
           <div class="scroll"><table>
-            <thead><tr><th>Account</th><th>Type</th><th>Earns on</th><th class="num">Limit</th><th class="num">Balance</th><th class="num">Points ≈ cash</th></tr></thead>
+            <thead><tr><th>Account</th><th>Type</th><th class="num">Balance</th></tr></thead>
             <tbody id="accts-overview"></tbody><tfoot id="accts-total"></tfoot>
+          </table></div>
+        </div>
+        <div class="card span-2">
+          <div class="card-head"><h2>Credit cards</h2><span class="link" id="cards-util"></span></div>
+          <div class="scroll"><table>
+            <thead><tr><th>Card</th><th>Earns on</th><th class="num">Limit</th><th class="num">Owed</th><th class="num">Available</th><th class="num">Used</th><th class="num">Points ≈ cash</th></tr></thead>
+            <tbody id="cards-overview"></tbody><tfoot id="cards-total"></tfoot>
           </table></div>
         </div>
       </div>
@@ -80,26 +87,32 @@
     <!-- CHECK-IN -->
     <section class="view" id="v-checkin" hidden>
       <div class="grid">
-        <div class="card span-2">
-          <div class="card-head"><div class="step-title"><span class="step-num">1</span><h2>Balances</h2></div><button class="btn ghost small" type="button" data-edit="accts">Edit</button></div>
+        <div class="card">
+          <div class="card-head"><div class="step-title"><span class="step-num">1</span><h2>Bank accounts</h2></div><button class="btn ghost small" type="button" data-edit="accts">Edit</button></div>
           <div class="scroll"><table><tbody id="accts-checkin"></tbody></table></div>
-          <button class="btn ghost small add-btn" type="button" data-add="accts" hidden>+ Add account</button>
+          <button class="btn ghost small add-btn" type="button" data-add="accts" data-type="Checking" hidden>+ Add account</button>
           <p class="note" data-note="accts"></p>
         </div>
+        <div class="card span-2">
+          <div class="card-head"><div class="step-title"><span class="step-num">2</span><h2>Credit cards</h2></div><button class="btn ghost small" type="button" data-edit="accts">Edit</button></div>
+          <div class="scroll"><table><tbody id="cards-checkin"></tbody><tfoot id="cards-checkin-total"></tfoot></table></div>
+          <button class="btn ghost small add-btn" type="button" data-add="accts" data-type="Credit" hidden>+ Add card</button>
+          <p class="note" data-note="cards"></p>
+        </div>
         <div class="card">
-          <div class="card-head"><div class="step-title"><span class="step-num">2</span><h2>Income received</h2></div><button class="btn ghost small" type="button" data-edit="income">Edit</button></div>
+          <div class="card-head"><div class="step-title"><span class="step-num">3</span><h2>Income received</h2></div><button class="btn ghost small" type="button" data-edit="income">Edit</button></div>
           <table><tbody id="income-checkin"></tbody></table>
           <button class="btn ghost small add-btn" type="button" data-add="income" hidden>+ Add income source</button>
           <p class="note" data-note="income"></p>
         </div>
         <div class="card span-2">
-          <div class="card-head"><div class="step-title"><span class="step-num">3</span><h2>Spending per category</h2></div><button class="btn ghost small" type="button" data-edit="cats">Edit</button></div>
+          <div class="card-head"><div class="step-title"><span class="step-num">4</span><h2>Spending per category</h2></div><button class="btn ghost small" type="button" data-edit="cats">Edit</button></div>
           <table><tbody id="cats-checkin"></tbody></table>
           <button class="btn ghost small add-btn" type="button" data-add="cats" hidden>+ Add category</button>
           <p class="note" data-note="cats"></p>
         </div>
         <div class="card">
-          <div class="card-head"><div class="step-title"><span class="step-num">4</span><h2>Ledger and note</h2></div></div>
+          <div class="card-head"><div class="step-title"><span class="step-num">5</span><h2>Ledger and note</h2></div></div>
           <p class="meta" style="margin:0 0 8px">Anything lent or paid back this month?</p>
           <button class="btn ghost" type="button" data-go="ledger">Open ledger</button>
           <p class="meta" style="margin:16px 0 8px">One line about the month (optional)</p>
