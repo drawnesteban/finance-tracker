@@ -42,6 +42,26 @@ function rec(key, create) {
   if (!D.months[key] && create) D.months[key] = { saved: false, balances: {}, income: {}, spend: {}, note: "" };
   return D.months[key];
 }
+// Left over for a month: income received minus spending entered. Money moved to a
+// savings goal is kept per month in toGoals, so each goal's total is its starting
+// amount plus everything moved into it.
+function leftover(key) {
+  const r = rec(key);
+  const vals = (o) => Object.values(o || {}).filter(has);
+  const inc = vals(r?.income), sp = vals(r?.spend);
+  const moved = Object.values(r?.toGoals || {}).reduce((t, v) => t + num(v), 0);
+  const left = inc.reduce((t, v) => t + num(v), 0) - sp.reduce((t, v) => t + num(v), 0);
+  return { known: !!(inc.length || sp.length), income: inc.reduce((t, v) => t + num(v), 0), spend: sp.reduce((t, v) => t + num(v), 0), left, moved, free: left - moved };
+}
+const goalSaved = (g) => num(g.saved) + Object.values(D.months).reduce((t, r) => t + num(r.toGoals?.[g.id]), 0);
+// The "move to savings" form, shown in the check-in and in the Savings goals card.
+function allocForm(where) {
+  if (!D.goals.length) return `<p class="note">Add a savings goal on Overview to move money into it.</p>`;
+  if (isFuture()) return "";
+  const L = leftover(curKey());
+  return `<div class="alloc" data-alloc="${where}"><select class="select">${D.goals.map((g) => `<option value="${g.id}">${esc(g.name || "Untitled")}</option>`).join("")}</select><input class="input short" inputmode="decimal" placeholder="Amount" value="${L.free > 0 ? L.free.toFixed(2) : ""}"><button class="btn small" type="button" data-alloc-go="${where}">Move to savings</button></div>`;
+}
+
 // The newest balance on or before a month: from a check-in, or the opening balance if there isn't one yet.
 function latestBalance(a, upto = curKey()) {
   const keys = Object.keys(D.months).filter((k) => k <= upto).sort().reverse();
@@ -61,7 +81,7 @@ const incomeExpected = () => D.income.reduce((t, i) => t + num(i.monthly) * num(
 
 const editing = { accts: false, income: false, cats: false, bills: false, goals: false, people: false };
 const blank = {
-  accts: () => ({ name: "", type: "Credit", earns: "", limit: 0, points: 0 }),
+  accts: () => ({ name: "", type: "Credit", earns: "", limit: 0, rkind: "Cash back", rewards: 0, cpp: 1 }),
   income: () => ({ name: "", kind: "Employee", monthly: 0, months: 0 }),
   cats: () => ({ name: "", plan: 0, meta: "" }),
   bills: () => ({ name: "", cat: D.cats[0]?.id || "", rep: "Monthly", amt: 0, day: 0, mon: 0 }),
@@ -69,7 +89,7 @@ const blank = {
 };
 const notes = {
   accts: ["The balance from your bank app.", "Rename, change the type, add an account, or remove one you closed. Saved months keep their balances."],
-  cards: ["What you owe: the statement balance from each card's app. Limit and available are for reference.", "Rename, set the limit and points, add a card, or remove one you closed. Saved months keep their balances."],
+  cards: ["What you owe: the statement balance from each card's app. Limit and available are for reference.", "Rename, set the limit, add a card, or remove one you closed. Saved months keep their balances."],
   income: ["Placeholders are the expected amounts. Type what actually arrived.", "Rename, set what you expect per month and for how many months, or remove a source."],
   cats: ["Totals from statements, not each purchase.", "Rename, set the monthly plan, or remove a category. Its bills become Uncategorized."],
   bills: ["Per month spreads weekly, quarterly and yearly bills evenly, so the monthly total is what to set aside.", "Rename, change category, how often it repeats, amount or due day, or remove a bill you cancelled."],
@@ -86,7 +106,7 @@ const rows = {
   accts: (a, n, ed) => {
     const types = select("accts", n, "type", ["Checking", "Savings", "Credit"].map((t) => [t, t === "Credit" ? "Credit card" : t]), a.type);
     if (ed && a.type !== "Credit") return `<tr><td>${field("accts", n, "name", a.name, "name-input", "Account name")}</td><td>${types}</td>${xBtn("accts", n, a.name)}</tr>`;
-    if (ed) return `<tr><td>${field("accts", n, "name", a.name, "name-input", "Card name")}</td><td>${types}</td><td>${field("accts", n, "earns", a.earns, "name-input", "Earns on")}</td><td class="num">${field("accts", n, "limit", a.limit || "", "input short", "Limit")}</td><td class="num">${field("accts", n, "points", a.points || "", "input short", "Points $")}</td>${xBtn("accts", n, a.name)}</tr>`;
+    if (ed) return `<tr><td>${field("accts", n, "name", a.name, "name-input", "Card name")}</td><td>${types}</td><td>${field("accts", n, "earns", a.earns, "name-input", "Earns on")}</td><td class="num">${field("accts", n, "limit", a.limit || "", "input short", "Limit")}</td>${xBtn("accts", n, a.name)}</tr>`;
     const r = rec(curKey()), p = rec(prevKey());
     const last = p?.balances?.[a.id];
     const cur = r?.balances?.[a.id];
@@ -107,11 +127,35 @@ const rows = {
 };
 const heads = {
   accts: (ed) => (ed ? `<tr><th>Account</th><th>Type</th><th></th></tr>` : `<tr><th>Account</th><th class="num">Last month</th><th class="num">${MONTHS[m].slice(0, 3)}</th></tr>`),
-  cards: (ed) => (ed ? `<tr><th>Card</th><th>Type</th><th>Earns on</th><th class="num">Limit</th><th class="num">Points ≈ $</th><th></th></tr>` : `<tr><th>Card</th><th class="num">Limit</th><th class="num">Last month</th><th class="num">Owed in ${MONTHS[m].slice(0, 3)}</th><th class="num">Available</th></tr>`),
+  cards: (ed) => (ed ? `<tr><th>Card</th><th>Type</th><th>Earns on</th><th class="num">Limit</th><th></th></tr>` : `<tr><th>Card</th><th class="num">Limit</th><th class="num">Last month</th><th class="num">Owed in ${MONTHS[m].slice(0, 3)}</th><th class="num">Available</th></tr>`),
   income: (ed) => (ed ? `<tr><th>Source</th><th class="num">Per month</th><th class="num">Months</th><th></th></tr>` : ""),
   cats: (ed) => (ed ? `<tr><th>Category</th><th class="num">Plan / mo</th><th></th></tr>` : `<tr><th>Category</th><th class="num">Plan</th><th class="num">Actual</th></tr>`),
   bills: (ed) => (ed ? `<tr><th>Bill</th><th>Category</th><th>Repeats</th><th class="num">Amount</th><th>Due day</th><th></th></tr>` : `<tr><th>Bill</th><th>Category</th><th>Repeats</th><th>Due</th><th class="num">Amount</th><th class="num">Per month</th><th class="num">Per year</th></tr>`),
 };
+
+// Card rewards. Points convert to cash at cpp cents per point; cash back is already dollars.
+// Older data kept a cash value in a.points, so it reads as cash back until changed.
+const rKind = (a) => a.rkind || "Cash back";
+const rAmt = (a) => num(a.rewards ?? a.points);
+const rCash = (a) => (rKind(a) === "Points" ? (rAmt(a) * num(a.cpp ?? 1)) / 100 : rAmt(a));
+const rText = (a) => (!rAmt(a) ? "—" : rKind(a) === "Points" ? `${Math.round(rAmt(a)).toLocaleString("en-US")} pts<div class="meta">≈ ${fmt2(rCash(a))}</div>` : `${fmt2(rAmt(a))}<div class="meta">cash back</div>`);
+
+function renderRewards() {
+  const C = D.accts.map((a, n) => ({ a, n })).filter((x) => x.a.type === "Credit");
+  $("rewards-box").hidden = !C.length;
+  $("rewards-checkin").innerHTML = `<tr><th>Card</th><th>Kind</th><th class="num">Balance</th><th class="num">¢ per point</th><th class="num">≈ Cash</th></tr>` + C.map(({ a, n }) => {
+    const pts = rKind(a) === "Points";
+    return `<tr><td>${dotName(a)}</td><td>${select("accts", n, "rkind", [["Points", "Points"], ["Cash back", "Cash back"]], rKind(a))}</td><td class="num">${field("accts", n, "rewards", rAmt(a) || "", "input short", pts ? "Points" : "$")}</td><td class="num">${pts ? field("accts", n, "cpp", a.cpp ?? 1, "input short", "1") : '<span class="meta">—</span>'}</td><td class="num meta" data-rcash="${a.id}">${rAmt(a) ? fmt2(rCash(a)) : "—"}</td></tr>`;
+  }).join("");
+  renderRewardTotals();
+}
+// Also called while typing, so it only touches the ≈ Cash cells and the total.
+function renderRewardTotals() {
+  const C = D.accts.filter((a) => a.type === "Credit");
+  C.forEach((a) => { const el = document.querySelector(`[data-rcash="${a.id}"]`); if (el) el.textContent = rAmt(a) ? fmt2(rCash(a)) : "—"; });
+  const pts = C.filter((a) => rKind(a) === "Points").reduce((t, a) => t + rAmt(a), 0);
+  $("rewards-total").innerHTML = C.length ? `<tr><td colspan="2">Total</td><td class="num">${pts ? `${Math.round(pts).toLocaleString("en-US")} pts` : ""}</td><td></td><td class="num">${fmt2(C.reduce((t, a) => t + rCash(a), 0))}</td></tr>` : "";
+}
 
 // Bank accounts and credit cards share one list (D.accts) but get their own tables.
 function renderAccts() {
@@ -122,6 +166,7 @@ function renderAccts() {
   $("accts-checkin").innerHTML = heads.accts(ed) + (banks || (ed ? "" : empty("accounts")));
   $("cards-checkin").innerHTML = heads.cards(ed) + (cards || (ed ? "" : empty("cards")));
   renderCardTotals();
+  renderRewards();
   document.querySelectorAll('[data-add="accts"]').forEach((b) => (b.hidden = !ed));
   document.querySelectorAll('[data-edit="accts"]').forEach((b) => (b.textContent = ed ? "Done" : "Edit"));
   document.querySelector('[data-note="accts"]').textContent = notes.accts[ed ? 1 : 0];
@@ -203,24 +248,46 @@ function renderOverview(skipGoals) {
   $("accts-overview").innerHTML = banks.map(({ a, b }) => `<tr><td>${dotName(a)}</td><td><span class="chip">${a.type}</span></td><td class="num">${b ? fmt2(b.v) : "—"}</td></tr>`).join("") || `<tr><td class="empty-line" colspan="3">No bank accounts yet.</td></tr>`;
   $("accts-total").innerHTML = banks.length ? `<tr><td colspan="2">Total</td><td class="num">${cashAccts.length ? fmt2(cash) : "—"}</td></tr>` : "";
   const used = (o, l) => (l ? `${Math.round((o / l) * 100)}%` : "—");
-  $("cards-overview").innerHTML = cardBal.map(({ a, b }) => { const l = num(a.limit), o = b ? b.v : null; return `<tr><td>${dotName(a)}</td><td class="meta">${esc(a.earns) || "—"}</td><td class="num">${l ? fmt(l) : "—"}</td><td class="num">${o !== null ? fmt2(o) : "—"}</td><td class="num">${l ? fmt(l - (o || 0)) : "—"}</td><td class="num meta">${o !== null ? used(o, l) : "—"}</td><td class="num${num(a.points) ? "" : " meta"}">${num(a.points) ? fmt2(num(a.points)) : "—"}</td></tr>`; }).join("") || `<tr><td class="empty-line" colspan="7">No credit cards yet.</td></tr>`;
-  $("cards-total").innerHTML = cards.length ? `<tr><td colspan="2">Total</td><td class="num">${fmt(limit)}</td><td class="num">${anyCheckin ? fmt2(owed) : "—"}</td><td class="num">${fmt(limit - owed)}</td><td class="num">${anyCheckin ? used(owed, limit) : "—"}</td><td class="num">${fmt2(cards.reduce((t, a) => t + num(a.points), 0))}</td></tr>` : "";
+  $("cards-overview").innerHTML = cardBal.map(({ a, b }) => { const l = num(a.limit), o = b ? b.v : null; return `<tr><td>${dotName(a)}</td><td class="meta">${esc(a.earns) || "—"}</td><td class="num">${l ? fmt(l) : "—"}</td><td class="num">${o !== null ? fmt2(o) : "—"}</td><td class="num">${l ? fmt(l - (o || 0)) : "—"}</td><td class="num meta">${o !== null ? used(o, l) : "—"}</td><td class="num${rAmt(a) ? "" : " meta"}">${rText(a)}</td></tr>`; }).join("") || `<tr><td class="empty-line" colspan="7">No credit cards yet.</td></tr>`;
+  $("cards-total").innerHTML = cards.length ? `<tr><td colspan="2">Total</td><td class="num">${fmt(limit)}</td><td class="num">${anyCheckin ? fmt2(owed) : "—"}</td><td class="num">${fmt(limit - owed)}</td><td class="num">${anyCheckin ? used(owed, limit) : "—"}</td><td class="num">≈ ${fmt2(cards.reduce((t, a) => t + rCash(a), 0))}</td></tr>` : "";
   $("cards-util").textContent = cards.length && limit ? `${fmt(limit)} total credit · ${used(owed, limit)} used` : "";
 }
 
 function renderGoals() {
   const ed = editing.goals;
   $("goals").innerHTML = ed
-    ? D.goals.map((g, n) => `<div class="goal-edit">${field("goals", n, "name", g.name, "name-input", "Goal")}${field("goals", n, "target", g.target || "", "input short", "Target")}${field("goals", n, "saved", g.saved || "", "input short", "Saved")}<button class="x-btn" type="button" data-list="goals" data-del="${n}" aria-label="Remove ${esc(g.name)}">✕</button></div>`).join("")
-    : D.goals.map((g) => { const t = num(g.target), s = num(g.saved), p = t ? Math.min(100, Math.round((s / t) * 100)) : 0; return `<div class="goal"><div class="goal-top"><span class="name">${esc(g.name || "Untitled")}</span><span class="amt">${fmt(s)} <small class="meta">/ ${fmt(t)}</small></span></div><div class="progress"><span style="width:${p}%;background:var(--ok)"></span></div></div>`; }).join("") || `<div class="empty">No money goals yet.<br>Write them on your goals sheet first, then add them here with Edit.</div>`;
+    ? (D.goals.length ? `<div class="goal-edit goal-head"><span>Goal</span><span>Target</span><span>Saved before</span><span></span></div>` : "") + D.goals.map((g, n) => `<div class="goal-edit">${field("goals", n, "name", g.name, "name-input", "Goal")}${field("goals", n, "target", g.target || "", "input short", "Target")}${field("goals", n, "saved", g.saved || "", "input short", "0")}<button class="x-btn" type="button" data-list="goals" data-del="${n}" aria-label="Remove ${esc(g.name)}">✕</button></div>`).join("")
+    : D.goals.map((g) => { const t = num(g.target), s = goalSaved(g), p = t ? Math.min(100, Math.round((s / t) * 100)) : 0; return `<div class="goal" data-goal-open title="Click to edit"><div class="goal-top"><span class="name">${esc(g.name || "Untitled")}</span><span class="amt">${fmt(s)} <small class="meta">/ ${fmt(t)}</small></span></div><div class="progress"><span style="width:${p}%;background:var(--ok)"></span></div></div>`; }).join("") || `<div class="empty">No money goals yet.<br>Write them on your goals sheet first, then add them here with Edit.</div>`;
+  const L = leftover(curKey());
+  $("goals-pool").innerHTML = ed ? `<p class="note">Target and what was already saved before using this app. Money moved from a check-in adds on top.</p>` : L.known && D.goals.length && !isFuture()
+    ? `<div class="pool"><span class="meta">Left over in ${MONTHS[m]}, not yet moved</span><b class="${L.free < 0 ? "neg" : ""}">${fmt2(L.free)}</b></div>${allocForm("overview")}`
+    : D.goals.length && !isFuture() ? `<p class="note">Fill in income and spending in the ${MONTHS[m]} check-in to see what's left over to move here.</p>` : "";
   document.querySelector('[data-add="goals"]').hidden = !ed;
   document.querySelector('[data-edit="goals"]').textContent = ed ? "Done" : "Edit";
 }
 
 // ---------- check-in ----------
 
+function renderLeftover() {
+  const L = leftover(curKey()), r = rec(curKey());
+  const planIn = incomeExpected() / 12, planOut = D.cats.reduce((t, c) => t + num(c.plan), 0);
+  const act = (v) => (L.known ? fmt2(v) : "—");
+  $("leftover-month").textContent = MONTHS[m];
+  const moves = Object.entries(r?.toGoals || {}).filter(([, v]) => num(v));
+  $("leftover").innerHTML = `<table>
+      <tr><th></th><th class="num">Plan, average month</th><th class="num">Actual</th></tr>
+      <tr><td>Income received</td><td class="num meta">${fmt(planIn)}</td><td class="num">${act(L.income)}</td></tr>
+      <tr><td>Spending</td><td class="num meta">−${fmt(planOut)}</td><td class="num">${L.known ? "−" + fmt2(L.spend) : "—"}</td></tr>
+      <tr class="total-row"><td>Left over</td><td class="num">${fmt(planIn - planOut)}</td><td class="num ${L.left < 0 ? "neg" : "good"}">${act(L.left)}</td></tr>
+      ${moves.map(([gid, v]) => { const g = D.goals.find((x) => x.id === gid); return `<tr><td class="meta">Moved to ${esc(g?.name || "a removed goal")}</td><td></td><td class="num">−${fmt2(num(v))} <button class="x-btn" type="button" data-unalloc="${gid}" aria-label="Undo">✕</button></td></tr>`; }).join("")}
+      ${moves.length ? `<tr class="total-row"><td>Not yet moved</td><td></td><td class="num ${L.free < 0 ? "neg" : ""}">${fmt2(L.free)}</td></tr>` : ""}
+    </table>
+    ${L.known ? allocForm("checkin") : `<p class="note">Fill in steps 3 and 4 and this works out what's left. Card payments aren't counted separately: spending per category already covers what you charged.</p>`}`;
+}
+
 function renderCheckin() {
   ["accts", "income", "cats"].forEach(renderList);
+  renderLeftover();
   const r = rec(curKey());
   $("month-note").value = r?.note || "";
   $("month-note").disabled = isFuture();
@@ -654,6 +721,19 @@ function show(t) {
 document.addEventListener("click", (e) => {
   const go = e.target.closest("[data-tab],[data-go]");
   if (go) { show(go.dataset.tab || go.dataset.go); return; }
+  if (e.target.closest("[data-goal-open]")) { editing.goals = true; renderGoals(); return; }
+  const go2 = e.target.closest("[data-alloc-go]");
+  if (go2) {
+    const box = document.querySelector(`[data-alloc="${go2.dataset.allocGo}"]`);
+    const gid = box.querySelector("select").value, v = num(box.querySelector("input").value);
+    if (!v) return;
+    const r = rec(curKey(), true);
+    r.toGoals = r.toGoals || {};
+    r.toGoals[gid] = num(r.toGoals[gid]) + v;
+    save("months"); renderOverview(); renderLeftover(); return;
+  }
+  const un = e.target.closest("[data-unalloc]");
+  if (un) { delete rec(curKey()).toGoals[un.dataset.unalloc]; save("months"); renderOverview(); renderLeftover(); return; }
   const day = e.target.closest("[data-day]");
   if (day) { selDay = +day.dataset.day; renderCalendar(); return; }
   const person = e.target.closest("[data-person]");
@@ -688,13 +768,13 @@ document.addEventListener("click", (e) => {
   save(l); renderAll();
 });
 
-const TEXT_FIELDS = ["name", "type", "cat", "rep", "kind", "earns", "status"];
+const TEXT_FIELDS = ["name", "type", "cat", "rep", "kind", "earns", "status", "rkind"];
 document.addEventListener("input", (e) => {
   const el = e.target;
   if (el.dataset.cv) {
     const r = rec(curKey(), true);
     r[el.dataset.cv][el.dataset.id] = el.value.trim() === "" ? "" : num(el.value);
-    save("months"); renderShell(); renderOverview(); if (el.dataset.cv === "balances") renderCardTotals(); return;
+    save("months"); renderShell(); renderOverview(); if (el.dataset.cv === "balances") renderCardTotals(); else renderLeftover(); return;
   }
   const { list, n, f } = el.dataset;
   if (!list || n === undefined) return;
@@ -707,6 +787,7 @@ document.addEventListener("input", (e) => {
   if (list !== "people" || !typing) renderLedger();
   if (list !== "bills" || !typing) renderPlan();
   if (list === "projects") renderProjects();
+  if (list === "accts" && typing) renderRewardTotals();
   if (el.tagName === "SELECT" && ["accts", "income", "cats"].includes(list)) renderCheckin();
   if (list === "cats" || list === "income") { if (tab !== "checkin") renderCheckin(); }
 });

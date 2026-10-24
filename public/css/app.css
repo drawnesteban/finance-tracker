@@ -258,3 +258,18 @@ tfoot td { font-weight: 700; border-top: 1px solid var(--line-strong); }
 }
 @media (max-width: 640px) { #proj-entries td, #proj-all td { white-space: nowrap; } }
 #accts-checkin .dotname { white-space: nowrap; }
+.rewards { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border); }
+.sub-head { font-size: 14px; font-weight: 600; margin: 0 0 6px; }
+#cards-overview td:last-child { white-space: nowrap; }
+.goal[data-goal-open] { cursor: pointer; }
+.goal[data-goal-open]:hover .name { text-decoration: underline; }
+.pool { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
+.alloc { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+.alloc .select { flex: 1 1 120px; min-width: 0; }
+.alloc .input { width: 100px; }
+#leftover table { margin-bottom: 4px; }
+.total-row td { font-weight: 700; border-top: 1px solid var(--line-strong); }
+td.neg, .pool .neg { color: var(--danger); }
+td.good { color: var(--ok); }
+.goal-head { font-size: 12px; color: var(--muted); padding-bottom: 0; }
+.goal-head span:nth-child(2), .goal-head span:nth-child(3) { text-align: right; }
