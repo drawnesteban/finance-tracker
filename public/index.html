@@ -16,6 +16,7 @@
       <a class="nav-item" data-tab="plan"><svg viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M4 6h0M4 12h0M4 18h0"/></svg>Plan</a>
       <a class="nav-item" data-tab="calendar"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>Calendar</a>
       <a class="nav-item" data-tab="taxes"><svg viewBox="0 0 24 24"><path d="M7 3h7l4 4v14H7z"/><path d="M14 3v4h4M10 12h5M10 16h5"/></svg>Taxes</a>
+      <a class="nav-item" data-tab="projects"><svg viewBox="0 0 24 24"><path d="M3 6h7l2 2h9v11H3z"/><path d="M9 14h6"/></svg>Project costs</a>
       <a class="nav-item" data-tab="ledger"><svg viewBox="0 0 24 24"><path d="M7 7h11l-3-3M17 17H6l3 3"/></svg>Ledger</a>
     </nav>
     <div class="nav-section"><div class="nav-heading">Accounts</div><ul class="nav-accts" id="nav-accts"></ul></div>
@@ -173,6 +174,42 @@
         </div>
       </div>
       <p class="note">Rates checked October 2026. Current law: 0% up to $9,000, then 7%, 14% above $25,000, 25% above $41,500 and 33% above $61,500, with a $3,500 personal exemption. PS 912 (the governor's reform: 0% up to $12,500, then 6/12/24/29/33%) was still a bill in the Senate as of the latest sources found, so the default is current law. Not modeled: deductions, the earned income credit (crédito por trabajo), and SINOT/disability insurance (0.3% of the first $9,000 per employer, shown on pay stubs).</p>
+    </section>
+
+    <!-- PROJECT COSTS -->
+    <section class="view" id="v-projects" hidden>
+      <div class="stats" id="proj-stats"></div>
+      <div class="grid">
+        <div class="card">
+          <div class="card-head"><h2>Projects</h2><button class="btn ghost small" type="button" id="proj-add">+ Project</button></div>
+          <ul id="proj-list"></ul>
+        </div>
+        <div class="card span-2">
+          <div class="card-head"><h2 id="proj-chart-title">Cost vs money back</h2><button class="btn ghost small" type="button" id="proj-edit">Project settings</button></div>
+          <div id="proj-settings" hidden></div>
+          <div class="pchart viz" id="proj-chart"></div>
+          <p class="note" id="proj-payback"></p>
+        </div>
+        <div class="card">
+          <div class="card-head"><h2>Where the cost goes</h2></div>
+          <div class="viz" id="proj-breakdown"></div>
+        </div>
+        <div class="card span-2">
+          <div class="card-head"><h2>Entries</h2><div class="segmented" id="entry-kind"><button type="button" class="on" data-kind="cost">Cost</button><button type="button" data-kind="income">Money back</button></div></div>
+          <form class="entry-form proj-form" id="proj-form">
+            <input class="input" type="date" name="date" required>
+            <select class="select" name="type"></select>
+            <input class="input" name="what" placeholder="What" required>
+            <input class="input num-in" name="amt" inputmode="decimal" placeholder="Amount" required>
+            <button class="btn" type="submit">Add</button>
+          </form>
+          <div class="scroll"><table><tbody id="proj-entries"></tbody></table></div>
+        </div>
+        <div class="card span-3">
+          <div class="card-head"><h2>All projects</h2><span class="link">which ones pay for themselves</span></div>
+          <div class="scroll"><table><tbody id="proj-all"></tbody></table></div>
+        </div>
+      </div>
     </section>
 
     <!-- LEDGER -->

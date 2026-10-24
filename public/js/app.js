@@ -23,6 +23,7 @@ function load() {
   D.months = store.get("fin.months", {});
   D.ledger = store.get("fin.ledger", { people: [], entries: [] });
   D.settings = store.get("fin.settings", { taxRules: "current" });
+  D.projects = store.get("fin.projects", []);
 }
 const save = (k) => {
   if (KEYS[k]) store.set(KEYS[k], D[k]);
@@ -362,9 +363,229 @@ function renderLedger() {
   if (!f.date.value) f.date.value = `${TODAY.y}-${String(TODAY.m + 1).padStart(2, "0")}-${String(TODAY.d).padStart(2, "0")}`;
 }
 
+// ---------- project costs ----------
+// Cash costs, time (hours × what an hour of yours is worth) and money back per project.
+// "Paid back" is the first date the money back covers the cash spent.
+
+const COST_TYPES = ["Work hours", "Materials", "Research", "Tools & software", "Travel", "Fees & services", "Other"];
+const typeColor = (t) => `var(--series-${Math.max(0, COST_TYPES.indexOf(t)) + 1})`;
+const STATUSES = ["Idea", "Active", "Done", "Paused"];
+let selProject = null, entryKind = "cost", projEditing = false;
+const isoDay = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const todayIso = isoDay(today);
+
+function projStats(p) {
+  const E = p.entries || [];
+  const rate = num(p.rate);
+  const costs = E.filter((e) => e.kind === "cost");
+  const cash = costs.filter((e) => e.type !== "Work hours").reduce((t, e) => t + num(e.amt), 0);
+  const hours = costs.filter((e) => e.type === "Work hours").reduce((t, e) => t + num(e.hours), 0);
+  const time = hours * rate;
+  const income = E.filter((e) => e.kind === "income").reduce((t, e) => t + num(e.amt), 0);
+  // Walk the entries in date order to find when the money back caught up.
+  let c = 0, ct = 0, inc = 0, paidCash = null, paidAll = null;
+  const points = [];
+  for (const e of [...E].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))) {
+    if (e.kind === "income") inc += num(e.amt);
+    else if (e.type === "Work hours") ct += num(e.hours) * rate;
+    else { c += num(e.amt); ct += num(e.amt); }
+    const last = points[points.length - 1];
+    if (last && last.date === e.date) Object.assign(last, { cash: c, all: ct, inc });
+    else points.push({ date: e.date, cash: c, all: ct, inc });
+    // A later cost can push it back under water, so only the last crossing counts.
+    if (inc < c) paidCash = null; else if (!paidCash && c > 0) paidCash = e.date;
+    if (inc < ct) paidAll = null; else if (!paidAll && ct > 0) paidAll = e.date;
+  }
+  return { rate, cash, hours, time, income, net: income - cash, trueNet: income - cash - time, perHour: hours ? (income - cash) / hours : null, paidCash, paidAll, points };
+}
+
+function projChart(p, st) {
+  const el = $("proj-chart");
+  if (!st.points.length) { el.innerHTML = `<div class="empty">No entries yet. Add costs and money back below, and this fills in.</div>`; return; }
+  const pts = [{ date: p.start || st.points[0].date, cash: 0, all: 0, inc: 0 }, ...st.points.filter((x) => !p.start || x.date >= p.start)];
+  if (pts[pts.length - 1].date < todayIso && p.status !== "Done") pts.push({ ...pts[pts.length - 1], date: todayIso, extended: true });
+  const W = 640, H = 240, L = 52, R = 112, T = 12, B = 26;
+  const t = (d) => new Date(d + "T12:00:00").getTime();
+  const x0 = t(pts[0].date), x1 = Math.max(t(pts[pts.length - 1].date), x0 + 864e5);
+  // Round the scale to a tidy step (1, 2, 2.5 or 5 × a power of ten) so the axis reads $250, $500…
+  const top = Math.max(1, ...pts.map((q) => Math.max(q.all, q.inc)));
+  const mag = 10 ** Math.floor(Math.log10(top / 4));
+  const tick = [1, 2, 2.5, 5, 10].map((k) => k * mag).find((k) => k * 4 >= top);
+  const yMax = tick * Math.ceil(top / tick);
+  const X = (d) => L + ((t(d) - x0) / (x1 - x0)) * (W - L - R);
+  const Y = (v) => T + (1 - v / yMax) * (H - T - B);
+  const step = (f) => pts.map((q, i) => (i ? `H${X(q.date).toFixed(1)}V${Y(q[f]).toFixed(1)}` : `M${X(q.date).toFixed(1)},${Y(q[f]).toFixed(1)}`)).join("");
+  const ticks = Array.from({ length: Math.round(yMax / tick) + 1 }, (_, i) => i * tick);
+  const nice = (v) => (v >= 1000 ? `$${+(v / 1000).toFixed(v >= 10000 ? 0 : 2)}k` : `$${Math.round(v)}`);
+  const months = [];
+  for (let d = new Date(x0); d.getTime() <= x1; d = new Date(d.getFullYear(), d.getMonth() + 1, 1)) {
+    const first = new Date(d.getFullYear(), d.getMonth(), 1);
+    if (first.getTime() >= x0) months.push(first);
+  }
+  const showTime = st.time > 0;
+  const series = [
+    { f: "inc", name: "Money back", c: "var(--series-1)", dash: false },
+    { f: "cash", name: "Cash spent", c: "var(--series-2)", dash: false },
+    ...(showTime ? [{ f: "all", name: "Cash + your time", c: "var(--series-2)", dash: true }] : []),
+  ];
+  // End labels, nudged apart so they don't overlap.
+  const ends = series.map((s) => ({ ...s, y: Y(pts[pts.length - 1][s.f]), v: pts[pts.length - 1][s.f] })).sort((a, b) => a.y - b.y);
+  for (let i = 1; i < ends.length; i++) if (ends[i].y - ends[i - 1].y < 15) ends[i].y = ends[i - 1].y + 15;
+  const pay = st.paidCash ? { x: X(st.paidCash), y: Y(pts.find((q) => q.date >= st.paidCash)?.inc ?? 0) } : null;
+  el.innerHTML = `<div class="legend">${series.map((s) => `<span><i class="${s.dash ? "dash" : ""}" style="background:${s.c};border-color:${s.c}"></i>${s.name}</span>`).join("")}</div>
+    <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Cumulative cost and money back for ${esc(p.name)}">
+      ${ticks.map((v) => `<line class="grid-line" x1="${L}" x2="${W - R}" y1="${Y(v)}" y2="${Y(v)}"/><text class="axis-text" x="${L - 8}" y="${Y(v) + 4}" text-anchor="end">${nice(v)}</text>`).join("")}
+      ${months.map((d) => `<text class="axis-text" x="${X(isoDay(d))}" y="${H - 6}" text-anchor="middle">${MONTHS[d.getMonth()].slice(0, 3)}</text>`).join("")}
+      ${series.map((s) => `<path class="series${s.dash ? " dash" : ""}" d="${step(s.f)}" stroke="${s.c}"/>`).join("")}
+      ${pay ? `<circle cx="${pay.x}" cy="${pay.y}" r="6" fill="var(--series-1)" stroke="var(--surface)" stroke-width="2"/><text class="label" x="${pay.x}" y="${pay.y - 12}" text-anchor="middle">Paid back ${shortDate(st.paidCash).replace(/, \d+$/, "")}</text>` : ""}
+      ${ends.map((s) => `<text class="label" x="${W - R + 8}" y="${s.y + 4}">${s.name.replace("Cash + your time", "+ time")} ${fmt(s.v)}</text>`).join("")}
+      <line class="cross" id="pcross" x1="0" x2="0" y1="${T}" y2="${H - B}" visibility="hidden"/>
+      <rect class="hit" id="phit" x="${L}" y="${T}" width="${W - L - R}" height="${H - T - B}"/>
+    </svg><div class="ptip" id="ptip" hidden></div>`;
+  const svg = el.querySelector("svg"), cross = $("pcross"), tip = $("ptip");
+  $("phit").addEventListener("mousemove", (ev) => {
+    const r = svg.getBoundingClientRect(), sx = ((ev.clientX - r.left) / r.width) * W;
+    let q = pts[0];
+    for (const c of pts) if (X(c.date) <= sx + 0.5) q = c;
+    const cx = X(q.date);
+    cross.setAttribute("x1", cx); cross.setAttribute("x2", cx); cross.setAttribute("visibility", "visible");
+    tip.hidden = false;
+    tip.innerHTML = `<b>${q.extended ? "Today" : shortDate(q.date)}</b>${series.map((s) => `<div><span><i style="background:${s.c}"></i>${s.name}</span><span>${fmt2(q[s.f])}</span></div>`).join("")}<div><span>Net (cash)</span><span>${fmt2(q.inc - q.cash)}</span></div>`;
+    const px = (cx / W) * r.width;
+    tip.style.left = `${Math.min(px + 12, r.width - 190)}px`;
+    tip.style.top = `${30}px`;
+  });
+  $("phit").addEventListener("mouseleave", () => { cross.setAttribute("visibility", "hidden"); tip.hidden = true; });
+}
+
+function renderProjects() {
+  const P = D.projects;
+  if (!P.some((p) => p.id === selProject)) selProject = P[0]?.id || null;
+  const p = P.find((x) => x.id === selProject);
+  $("proj-list").innerHTML = P.map((q) => {
+    const st = projStats(q);
+    return `<li class="row person${q.id === selProject ? " on" : ""}" style="grid-template-columns:4px 1fr auto" data-project="${q.id}"><span class="swatch" style="background:${q.c}"></span><div><div class="name">${esc(q.name || "Untitled")}</div><div class="meta">${esc(q.status || "Active")} · ${st.hours ? `${+st.hours.toFixed(1)}h · ` : ""}${fmt(st.cash)} spent</div></div><span class="amt ${st.net >= 0 ? "balance-pos" : "balance-neg"}">${fmt(st.net)}</span></li>`;
+  }).join("") || `<li class="empty-line">No projects yet. Add one to start tracking what it costs.</li>`;
+
+  const all = P.map((q) => ({ q, st: projStats(q) }));
+  $("proj-all").innerHTML = `<tr><th>Project</th><th>Status</th><th class="num">Cash spent</th><th class="num">Hours</th><th class="num">Money back</th><th class="num">Net (cash)</th><th class="num">Earned per hour</th><th>Paid back</th></tr>` +
+    all.map(({ q, st }) => `<tr><td>${dotName(q)}</td><td class="meta">${esc(q.status || "Active")}</td><td class="num">${fmt(st.cash)}</td><td class="num">${+st.hours.toFixed(1)}</td><td class="num">${fmt(st.income)}</td><td class="num ${st.net >= 0 ? "balance-pos" : "balance-neg"}">${fmt(st.net)}</td><td class="num">${st.perHour === null ? "—" : fmt2(st.perHour)}</td><td>${st.paidCash ? `<span class="status paid">${shortDate(st.paidCash)}</span>` : st.cash ? `<span class="status owed">${fmt(st.cash - st.income)} to go</span>` : '<span class="meta">—</span>'}</td></tr>`).join("") +
+    (P.length ? "" : `<tr><td class="empty-line" colspan="8">Nothing to compare yet.</td></tr>`);
+
+  const off = !p;
+  ["proj-edit"].forEach((id) => ($(id).disabled = off));
+  $("proj-form").hidden = off;
+  if (!p) {
+    $("proj-stats").innerHTML = ""; $("proj-chart").innerHTML = `<div class="empty">Add a project to see what it costs and when it pays you back.</div>`;
+    $("proj-breakdown").innerHTML = ""; $("proj-entries").innerHTML = ""; $("proj-payback").textContent = ""; $("proj-settings").hidden = true;
+    return;
+  }
+  const st = projStats(p);
+  const small = (t) => `<small style="font-size:14px;font-weight:500;color:var(--muted)">${t}</small>`;
+  $("proj-chart-title").textContent = p.name || "Untitled";
+  $("proj-stats").innerHTML = `
+    <div class="stat"><div class="stat-label">Total cost</div><div class="stat-value">${fmt(st.cash + st.time)}</div><div class="stat-note">${fmt(st.cash)} cash + ${fmt(st.time)} of your time (${+st.hours.toFixed(1)}h × ${fmt(st.rate)})</div></div>
+    <div class="stat"><div class="stat-label">Money back</div><div class="stat-value">${fmt(st.income)}</div><div class="stat-note">${num(p.quote) ? `expected ${fmt(num(p.quote))} · ${Math.round((st.income / num(p.quote)) * 100)}% in` : "set an expected amount in Project settings"}</div></div>
+    <div class="stat"><div class="stat-label">Net</div><div class="stat-value ${st.net >= 0 ? "good" : "neg"}">${fmt(st.net)}</div><div class="stat-note">money back − cash spent · counting your time: ${fmt(st.trueNet)}</div></div>
+    <div class="stat"><div class="stat-label">Earned per hour</div><div class="stat-value ${st.perHour === null ? "" : st.perHour >= st.rate ? "good" : "neg"}">${st.perHour === null ? "—" : fmt2(st.perHour)}${st.perHour === null ? "" : small("/h")}</div><div class="stat-note">${st.perHour === null ? "log work hours to see this" : `(money back − cash) ÷ hours · your rate is ${fmt(st.rate)}/h`}</div></div>`;
+
+  projChart(p, st);
+  const budget = num(p.budget);
+  $("proj-payback").innerHTML = [
+    st.paidCash ? `Paid back its cash on <b>${shortDate(st.paidCash)}</b>${st.net > 0 ? `, and has made ${fmt(st.net)} beyond it` : ""}.` : st.cash ? `Needs <b>${fmt(st.cash - st.income)}</b> more money back to cover its cash.` : "",
+    st.time ? (st.paidAll ? `Covered your time too on ${shortDate(st.paidAll)}.` : `Covering your time as well needs ${fmt(st.cash + st.time - st.income)} more.`) : "",
+    budget ? `Cash budget: ${fmt(st.cash)} of ${fmt(budget)} used${st.cash > budget ? ` (<span class="balance-neg">${fmt(st.cash - budget)} over</span>)` : ""}.` : "",
+  ].filter(Boolean).join(" ");
+
+  // Cost breakdown by type, time valued at the project's rate.
+  const byType = COST_TYPES.map((ty) => {
+    const es = (p.entries || []).filter((e) => e.kind === "cost" && e.type === ty);
+    const v = ty === "Work hours" ? es.reduce((t, e) => t + num(e.hours), 0) * st.rate : es.reduce((t, e) => t + num(e.amt), 0);
+    return { ty, v, hours: ty === "Work hours" ? es.reduce((t, e) => t + num(e.hours), 0) : 0 };
+  }).filter((r) => r.v > 0);
+  const tot = byType.reduce((t, r) => t + r.v, 0);
+  $("proj-breakdown").innerHTML = tot
+    ? `<div class="stackbar" role="img" aria-label="Cost split by type">${byType.map((r) => `<span style="width:${(r.v / tot) * 100}%;background:${typeColor(r.ty)}" title="${r.ty} ${fmt(r.v)}"></span>`).join("")}</div>` +
+      byType.map((r) => `<div class="brow"><b style="background:${typeColor(r.ty)}"></b><span>${r.ty}${r.hours ? ` <span class="meta">${+r.hours.toFixed(1)}h</span>` : ""}</span><span class="amt">${fmt(r.v)}</span><span class="meta">${Math.round((r.v / tot) * 100)}%</span></div>`).join("") +
+      `<p class="note">Work hours are valued at ${fmt(st.rate)}/h, what an hour of yours is worth (set in Project settings). It isn't money you paid, so Net leaves it out.</p>`
+    : `<div class="empty-line">No costs yet.</div>`;
+
+  // Settings row.
+  $("proj-settings").hidden = !projEditing;
+  $("proj-edit").textContent = projEditing ? "Done" : "Project settings";
+  const n = P.indexOf(p);
+  if (projEditing && $("proj-settings").dataset.for !== p.id) {
+    $("proj-settings").dataset.for = p.id;
+    $("proj-settings").className = "proj-settings";
+    $("proj-settings").innerHTML = `
+      <label>Name${field("projects", n, "name", p.name, "input", "Project name")}</label>
+      <label>Status${select("projects", n, "status", STATUSES.map((s) => [s, s]), p.status || "Active")}</label>
+      <label>Your hour is worth${field("projects", n, "rate", p.rate || "", "input", "$ per hour")}</label>
+      <label>Cash budget${field("projects", n, "budget", p.budget || "", "input", "optional")}</label>
+      <label>Expected money back${field("projects", n, "quote", p.quote || "", "input", "optional")}</label>
+      <button class="btn ghost small danger" type="button" id="proj-del" style="color:var(--danger)">Delete project</button>`;
+  }
+
+  // Entry form.
+  const f = $("proj-form");
+  document.querySelectorAll("#entry-kind button").forEach((b) => b.classList.toggle("on", b.dataset.kind === entryKind));
+  f.type.hidden = entryKind === "income";
+  if (!f.type.options.length) f.type.innerHTML = COST_TYPES.map((t) => `<option>${t}</option>`).join("");
+  f.what.placeholder = entryKind === "income" ? "From (client, sale, grant…)" : "What";
+  f.amt.placeholder = entryKind === "cost" && f.type.value === "Work hours" ? "Hours" : "Amount";
+  f.classList.toggle("income-mode", entryKind === "income");
+  if (!f.date.value) f.date.value = todayIso;
+
+  const E = [...(p.entries || [])].sort((a, b) => (a.date < b.date ? 1 : -1));
+  $("proj-entries").innerHTML = `<tr><th>Date</th><th>Type</th><th>What</th><th class="num">Hours</th><th class="num">Amount</th><th></th></tr>` + E.map((e) => {
+    const inc = e.kind === "income";
+    const val = inc ? num(e.amt) : e.type === "Work hours" ? num(e.hours) * st.rate : num(e.amt);
+    return `<tr><td class="meta" style="white-space:nowrap">${esc(shortDate(e.date))}</td><td>${inc ? `<span class="dotname"><span class="dot" style="background:var(--series-1)"></span>Money back</span>` : `<span class="dotname"><span class="dot" style="background:${typeColor(e.type)}"></span>${esc(e.type)}</span>`}</td><td>${esc(e.what)}</td><td class="num meta">${e.type === "Work hours" && !inc ? +num(e.hours).toFixed(2) : ""}</td><td class="num ${inc ? "balance-pos" : ""}">${inc ? "+" : ""}${fmt2(val)}${e.type === "Work hours" && !inc ? ' <small class="meta">time</small>' : ""}</td><td class="num"><button class="x-btn" type="button" data-pentry="${e.id}" aria-label="Delete entry">✕</button></td></tr>`;
+  }).join("") + (E.length ? "" : `<tr><td class="empty-line" colspan="6">No entries yet.</td></tr>`);
+}
+
+document.addEventListener("click", (e) => {
+  const pr = e.target.closest("[data-project]");
+  if (pr) { selProject = pr.dataset.project; $("proj-settings").dataset.for = ""; renderProjects(); return; }
+  const pe = e.target.closest("[data-pentry]");
+  if (pe) {
+    const p = D.projects.find((x) => x.id === selProject);
+    p.entries = p.entries.filter((x) => x.id !== pe.dataset.pentry);
+    save("projects"); renderProjects(); return;
+  }
+  const k = e.target.closest("#entry-kind [data-kind]");
+  if (k) { entryKind = k.dataset.kind; renderProjects(); return; }
+  if (e.target.id === "proj-del") {
+    const p = D.projects.find((x) => x.id === selProject);
+    if (p && confirm(`Delete ${p.name || "this project"} and all its entries?`)) {
+      D.projects = D.projects.filter((x) => x !== p); projEditing = false; save("projects"); renderProjects();
+    }
+  }
+});
+$("proj-add").addEventListener("click", () => {
+  const p = { id: newId("pr"), name: "", status: "Active", start: todayIso, rate: 25, budget: 0, quote: 0, c: palette[D.projects.length % palette.length], entries: [] };
+  D.projects.push(p); selProject = p.id; projEditing = true; $("proj-settings").dataset.for = "";
+  save("projects"); renderProjects();
+  $("proj-settings").querySelector('[data-f="name"]')?.focus();
+});
+$("proj-edit").addEventListener("click", () => { projEditing = !projEditing; $("proj-settings").dataset.for = ""; renderProjects(); });
+$("proj-form").addEventListener("change", (e) => { if (e.target.name === "type") renderProjects(); });
+$("proj-form").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const f = e.target, p = D.projects.find((x) => x.id === selProject);
+  const v = Math.abs(num(f.amt.value));
+  if (!p || !v) return;
+  const hoursEntry = entryKind === "cost" && f.type.value === "Work hours";
+  p.entries = p.entries || [];
+  p.entries.push({ id: newId("pe"), kind: entryKind, type: entryKind === "income" ? "" : f.type.value, date: f.date.value, what: f.what.value.trim(), ...(hoursEntry ? { hours: v } : { amt: v }) });
+  if (!p.start || f.date.value < p.start) p.start = f.date.value;
+  f.what.value = ""; f.amt.value = "";
+  save("projects"); renderProjects();
+});
+
 // ---------- routing and shell ----------
 
-const titles = { overview: "Overview", checkin: "Monthly check-in", plan: "Plan", calendar: "Calendar", taxes: "Taxes", ledger: "Ledger" };
+const titles = { overview: "Overview", checkin: "Monthly check-in", plan: "Plan", calendar: "Calendar", taxes: "Taxes", projects: "Project costs", ledger: "Ledger" };
 let tab = "overview";
 function renderShell() {
   $("m-label").textContent = `${MONTHS[m]} ${y}`;
@@ -378,7 +599,7 @@ function renderShell() {
   $("month-status").textContent = isFuture() ? "Future month: plan and calendar only" : r?.saved ? `${MONTHS[m]} checked in` : r ? `${MONTHS[m]} check-in started, not saved` : "";
 }
 function renderAll() {
-  renderShell(); renderOverview(); renderCheckin(); renderPlan(); renderCalendar(); renderTaxes(); renderLedger();
+  renderShell(); renderOverview(); renderCheckin(); renderPlan(); renderCalendar(); renderTaxes(); renderLedger(); renderProjects();
 }
 function show(t) {
   if (!titles[t]) t = "overview";
@@ -430,7 +651,7 @@ document.addEventListener("click", (e) => {
   save(l); renderAll();
 });
 
-const TEXT_FIELDS = ["name", "type", "cat", "rep", "kind", "earns"];
+const TEXT_FIELDS = ["name", "type", "cat", "rep", "kind", "earns", "status"];
 document.addEventListener("input", (e) => {
   const el = e.target;
   if (el.dataset.cv) {
@@ -448,6 +669,7 @@ document.addEventListener("input", (e) => {
   renderShell(); renderOverview(list === "goals" && typing); renderCalendar(); renderTaxes();
   if (list !== "people" || !typing) renderLedger();
   if (list !== "bills" || !typing) renderPlan();
+  if (list === "projects") renderProjects();
   if (el.tagName === "SELECT" && ["accts", "income", "cats"].includes(list)) renderCheckin();
   if (list === "cats" || list === "income") { if (tab !== "checkin") renderCheckin(); }
 });

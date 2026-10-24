@@ -1,6 +1,6 @@
 # Finance Tracker
 
-Self-hosted money dashboard that matches OST Planner: a monthly check-in, the plan (recurring bills and category budgets), a bills calendar, a Puerto Rico tax estimate and a ledger for money lent. It runs in Docker on your own computer and saves everything as plain files.
+Self-hosted money dashboard that matches OST Planner: a monthly check-in, the plan (recurring bills and category budgets), a bills calendar, a Puerto Rico tax estimate, project costs (what a project cost in cash and time, what it brought back, and when it paid for itself) and a ledger for money lent. It runs in Docker on your own computer and saves everything as plain files.
 
 ## What you need
 
@@ -60,7 +60,7 @@ Calendar screen › **See bills in Apple Calendar**. Subscribe to `http://<compu
 
 ## Where your data lives
 
-- `data/state/*.json`: one file per list (accounts, income, categories, bills, months, ledger, goals, settings)
+- `data/state/*.json`: one file per list (accounts, income, categories, bills, months, ledger, goals, projects, settings)
 - `data/backups/`: a copy made automatically before each restore
 
 To keep the data somewhere else, copy `.env.example` to `.env`, set `FIN_DATA_DIR` to a full path, and run `docker compose up -d`.
@@ -79,6 +79,14 @@ Click **$ Finance** at the top of the sidebar:
 - PS 912 (the 2026 reform proposal) is available as a toggle. It was still a bill as of the latest sources found, so check its status before relying on it.
 - Each employer's withholding is estimated by annualizing the monthly pay and subtracting the exemption, the way payroll does. That's why several part-time jobs can each withhold $0 even when the total is taxable.
 - Not modeled: deductions, credits (including the crédito por trabajo) and SINOT. It's a planning estimate, not tax advice.
+
+## Project costs: how the numbers work
+
+- Costs are work hours, materials, research, tools and software, travel, fees, or other. Money back is anything the project brings in.
+- **Net** is money back minus cash spent. Work hours aren't cash, so they're left out of Net.
+- Hours are valued at each project's "Your hour is worth" rate (default $25, set in Project settings). That gives a second, stricter break-even line on the chart.
+- **Earned per hour** is (money back − cash spent) ÷ hours. It turns red when it's below your rate.
+- **Paid back** is the date the money back last caught up with the cash spent.
 
 ## Layout
 
