@@ -1,0 +1,10 @@
+services:
+  finance-tracker:
+    build: .
+    container_name: finance-tracker
+    ports:
+      - "4440:4440"
+    volumes:
+      # Where your data is kept on this computer. Change it in the .env file.
+      - "${FIN_DATA_DIR:-./data}:/data"
+    restart: unless-stopped

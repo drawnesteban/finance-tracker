@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Finance</title>
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<div class="shell">
+  <aside class="sidebar" id="sidebar">
+    <button class="brand" id="brand" type="button" title="Backup and settings"><span class="brand-mark">$</span><span class="brand-name">Finance</span></button>
+    <nav class="nav" id="nav">
+      <a class="nav-item" data-tab="overview"><svg viewBox="0 0 24 24"><path d="M3 11 12 4l9 7v9H3z"/></svg>Overview</a>
+      <a class="nav-item" data-tab="checkin"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="m8 12 3 3 5-6"/></svg>Monthly check-in</a>
+      <a class="nav-item" data-tab="plan"><svg viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M4 6h0M4 12h0M4 18h0"/></svg>Plan</a>
+      <a class="nav-item" data-tab="calendar"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>Calendar</a>
+      <a class="nav-item" data-tab="taxes"><svg viewBox="0 0 24 24"><path d="M7 3h7l4 4v14H7z"/><path d="M14 3v4h4M10 12h5M10 16h5"/></svg>Taxes</a>
+      <a class="nav-item" data-tab="ledger"><svg viewBox="0 0 24 24"><path d="M7 7h11l-3-3M17 17H6l3 3"/></svg>Ledger</a>
+    </nav>
+    <div class="nav-section"><div class="nav-heading">Accounts</div><ul class="nav-accts" id="nav-accts"></ul></div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <button class="menu-btn" id="menu-btn" type="button" aria-label="Menu"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+      <div>
+        <p class="eyebrow"><span id="eyebrow"></span><span class="save-state" id="save-state"></span></p>
+        <h1 id="page-title">Overview</h1>
+      </div>
+      <div class="topbar-actions">
+        <button class="btn" type="button" data-go="checkin" id="start-checkin">Monthly check-in</button>
+      </div>
+    </header>
+
+    <div class="toolbar"><span class="month-status" id="month-status"></span>
+      <div class="month-nav"><button class="btn ghost small" id="m-prev" aria-label="Previous month">‹</button><span id="m-label"></span><button class="btn ghost small" id="m-next" aria-label="Next month">›</button><button class="btn ghost small" id="m-today">This month</button></div>
+    </div>
+
+    <!-- OVERVIEW -->
+    <section class="view" id="v-overview" hidden>
+      <div class="banner" id="welcome" hidden><span class="sample">New</span><span>Nothing here yet. If you have a starting file or a backup, click <b>$ Finance</b> at the top of the sidebar and choose <b>Restore from backup</b>. Otherwise, add accounts and income in <a class="link" data-go="checkin">Monthly check-in</a> and bills in <a class="link" data-go="plan">Plan</a> with the Edit buttons.</span></div>
+      <div class="stats" id="stats"></div>
+      <div class="grid">
+        <div class="card span-2">
+          <div class="card-head"><h2>Spending vs plan · <span class="m-name"></span></h2><a class="link" data-go="plan">Plan</a></div>
+          <ul id="spend-overview"></ul>
+        </div>
+        <div class="card">
+          <div class="card-head"><h2>Monthly check-in</h2><span class="link">~15 min</span></div>
+          <p class="meta" style="margin:0 0 8px" id="checkin-when"></p>
+          <ul id="checkin-steps"></ul>
+        </div>
+        <div class="card">
+          <div class="card-head"><h2>Income <span class="y-name"></span></h2><a class="link" data-go="checkin">Edit sources</a></div>
+          <ul id="income-overview"></ul>
+          <p class="note" id="income-total"></p>
+        </div>
+        <div class="card">
+          <div class="card-head"><h2>Ledger</h2><a class="link" data-go="ledger">All</a></div>
+          <ul id="ledger-overview"></ul>
+          <p class="note">Positive means they owe you.</p>
+        </div>
+        <div class="card">
+          <div class="card-head"><h2>Savings goals</h2><button class="btn ghost small" type="button" data-edit="goals">Edit</button></div>
+          <div id="goals"></div>
+          <button class="btn ghost small add-btn" type="button" data-add="goals" hidden>+ Add goal</button>
+        </div>
+        <div class="card span-3">
+          <div class="card-head"><h2>Accounts</h2><span class="link" id="accts-asof"></span></div>
+          <div class="scroll"><table>
+            <thead><tr><th>Account</th><th>Type</th><th>Earns on</th><th class="num">Limit</th><th class="num">Balance</th><th class="num">Points ≈ cash</th></tr></thead>
+            <tbody id="accts-overview"></tbody><tfoot id="accts-total"></tfoot>
+          </table></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- CHECK-IN -->
+    <section class="view" id="v-checkin" hidden>
+      <div class="grid">
+        <div class="card span-2">
+          <div class="card-head"><div class="step-title"><span class="step-num">1</span><h2>Balances</h2></div><button class="btn ghost small" type="button" data-edit="accts">Edit</button></div>
+          <div class="scroll"><table><tbody id="accts-checkin"></tbody></table></div>
+          <button class="btn ghost small add-btn" type="button" data-add="accts" hidden>+ Add account</button>
+          <p class="note" data-note="accts"></p>
+        </div>
+        <div class="card">
+          <div class="card-head"><div class="step-title"><span class="step-num">2</span><h2>Income received</h2></div><button class="btn ghost small" type="button" data-edit="income">Edit</button></div>
+          <table><tbody id="income-checkin"></tbody></table>
+          <button class="btn ghost small add-btn" type="button" data-add="income" hidden>+ Add income source</button>
+          <p class="note" data-note="income"></p>
+        </div>
+        <div class="card span-2">
+          <div class="card-head"><div class="step-title"><span class="step-num">3</span><h2>Spending per category</h2></div><button class="btn ghost small" type="button" data-edit="cats">Edit</button></div>
+          <table><tbody id="cats-checkin"></tbody></table>
+          <button class="btn ghost small add-btn" type="button" data-add="cats" hidden>+ Add category</button>
+          <p class="note" data-note="cats"></p>
+        </div>
+        <div class="card">
+          <div class="card-head"><div class="step-title"><span class="step-num">4</span><h2>Ledger and note</h2></div></div>
+          <p class="meta" style="margin:0 0 8px">Anything lent or paid back this month?</p>
+          <button class="btn ghost" type="button" data-go="ledger">Open ledger</button>
+          <p class="meta" style="margin:16px 0 8px">One line about the month (optional)</p>
+          <input class="input" style="width:100%;text-align:left" id="month-note" placeholder="e.g. car repair, summer camp paid">
+          <div style="margin-top:18px;display:flex;justify-content:flex-end"><button class="btn" type="button" id="save-month"></button></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- PLAN -->
+    <section class="view" id="v-plan" hidden>
+      <div class="stats" id="plan-stats"></div>
+      <div class="grid">
+        <div class="card span-2">
+          <div class="card-head"><h2>Recurring bills</h2><div class="head-actions"><span class="link">revise in January and July</span><button class="btn ghost small" type="button" data-edit="bills">Edit</button></div></div>
+          <div class="scroll"><table><tbody id="bills-checkin"></tbody><tfoot id="bills-total"></tfoot></table></div>
+          <button class="btn ghost small add-btn" type="button" data-add="bills" hidden>+ Add bill</button>
+          <p class="note" data-note="bills"></p>
+        </div>
+        <div class="card">
+          <div class="card-head"><h2>Category budgets</h2><a class="link" data-go="checkin">Edit categories</a></div>
+          <table><tbody id="catplan"></tbody></table>
+          <p class="note">"Bills" adds up the recurring bills in each category, per month. "Plan" is the monthly budget you set for that category in the check-in. Red means the plan is lower than the bills already in it.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- CALENDAR -->
+    <section class="view" id="v-calendar" hidden>
+      <div class="card cal">
+        <aside class="cal-side">
+          <div class="cal-side-head"><h3 id="cal-title"></h3></div>
+          <div class="mini-grid" id="mini"></div>
+          <div class="agenda" id="agenda"></div>
+        </aside>
+        <div class="cal-main">
+          <div class="cal-head"><h2 id="cal-head"></h2><span class="meta" id="cal-total"></span></div>
+          <div class="cal-dows"><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span class="wknd">Sat</span><span class="wknd">Sun</span></div>
+          <div id="cal-grid"></div>
+        </div>
+      </div>
+      <p class="note">Shows bills that have a due day (set it on the Plan screen). Spending budgets like groceries and gas have no due day, so they stay off the calendar.</p>
+      <div class="card" style="margin-top:14px">
+        <div class="card-head"><h2>See bills in Apple Calendar</h2></div>
+        <p class="meta" style="margin:0">Subscribe once and every bill with a due day shows up in Calendar (and in Parchment), with an alert the day before. It updates from here, so you never type a due date twice. On iPhone: Settings › Calendar › Accounts › Add Account › Other › Add Subscribed Calendar, and paste the address. The phone has to be able to reach this computer.</p>
+        <div class="feed"><code id="feed-url"></code><button class="btn ghost small" type="button" id="feed-copy">Copy</button><a class="btn ghost small" id="feed-open">Open in Calendar</a></div>
+      </div>
+    </section>
+
+    <!-- TAXES -->
+    <section class="view" id="v-taxes" hidden>
+      <div class="banner"><span class="sample">Estimate</span><span>Assumes you're a bona fide resident of Puerto Rico, single, with no dependents. Your wages are taxed by Hacienda, not the IRS, but Social Security and Medicare still apply. This is a planning estimate, not tax advice. Check it against your real 499R-2/W-2PR forms and a CPA.</span></div>
+      <div class="toolbar" style="justify-content:flex-start"><span class="meta">Tax rules</span><div class="segmented" id="tax-rules"><button data-rules="current">Current law</button><button data-rules="ps912">PS 912 proposal</button></div><span class="meta" id="rules-note"></span></div>
+      <div class="stats" id="tax-stats"></div>
+      <div class="grid">
+        <div class="card span-3">
+          <div class="card-head"><h2>Per income source · <span class="y-name"></span></h2><a class="link" data-go="checkin">Edit sources</a></div>
+          <div class="scroll"><table><tbody id="tax-table"></tbody><tfoot id="tax-foot"></tfoot></table></div>
+          <p class="note">Employee: the employer withholds PR income tax, Social Security and Medicare, and you get a 499R-2/W-2PR. Services: the payer withholds 10% and sends you a 480.6SP. Nothing else is withheld, and you owe self-employment tax on your own. Uses the expected amounts from your income sources.</p>
+        </div>
+        <div class="card span-2">
+          <div class="card-head"><h2>How much each source should withhold</h2></div>
+          <ol class="calc" id="tax-explain"></ol>
+        </div>
+        <div class="card">
+          <div class="card-head"><h2>Your year, all sources together</h2></div>
+          <ol class="calc" id="tax-year"></ol>
+        </div>
+        <div class="card span-3">
+          <div class="card-head"><h2>What your forms should show</h2><span class="link">compare with the real ones in January</span></div>
+          <div class="forms" id="tax-forms"></div>
+        </div>
+      </div>
+      <p class="note">Rates checked October 2026. Current law: 0% up to $9,000, then 7%, 14% above $25,000, 25% above $41,500 and 33% above $61,500, with a $3,500 personal exemption. PS 912 (the governor's reform: 0% up to $12,500, then 6/12/24/29/33%) was still a bill in the Senate as of the latest sources found, so the default is current law. Not modeled: deductions, the earned income credit (crédito por trabajo), and SINOT/disability insurance (0.3% of the first $9,000 per employer, shown on pay stubs).</p>
+    </section>
+
+    <!-- LEDGER -->
+    <section class="view" id="v-ledger" hidden>
+      <div class="grid">
+        <div class="card">
+          <div class="card-head"><h2>People</h2><button class="btn ghost small" type="button" data-edit="people">Edit</button></div>
+          <ul id="people"></ul>
+          <button class="btn ghost small add-btn" type="button" data-add="people">+ Person</button>
+        </div>
+        <div class="card span-2">
+          <div class="card-head"><h2 id="ledger-title"></h2><span class="amt" id="ledger-balance"></span></div>
+          <form class="entry-form" id="entry-form">
+            <input class="input" type="date" name="date" required>
+            <input class="input" name="what" placeholder="What for" required>
+            <select class="select" name="dir"><option value="lent">I lent / paid for them</option><option value="repaid">They paid me back</option></select>
+            <input class="input num-in" name="amt" placeholder="Amount" inputmode="decimal" required>
+            <button class="btn" type="submit">Add</button>
+          </form>
+          <div class="scroll"><table><tbody id="entries"></tbody></table></div>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<dialog class="dialog" id="settings">
+  <form method="dialog">
+    <h2>Backup and settings</h2>
+    <h3>Backups</h3>
+    <p>A backup is one .json file with everything: accounts, bills, check-ins, ledger and goals.</p>
+    <div class="row-actions">
+      <a class="btn ghost" href="/api/backup" download>Download backup</a>
+      <label class="btn ghost">Restore from backup<input type="file" id="restore-file" accept=".json,application/json" hidden></label>
+    </div>
+    <p class="note" id="restore-msg">Restoring replaces everything here. The current data is saved to the backups folder first.</p>
+    <h3>Where your data lives</h3>
+    <p>As JSON files in the <code>data/</code> folder next to <code>docker-compose.yml</code> (or the folder set in <code>.env</code>).</p>
+    <div class="dialog-actions"><button class="btn" value="close">Done</button></div>
+  </form>
+</dialog>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

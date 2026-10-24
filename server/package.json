@@ -1,0 +1,5 @@
+{
+  "name": "finance-tracker-server",
+  "private": true,
+  "type": "module"
+}
